@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "privy-signing"
+version = "1.0.0"
+description = "Privy Signing Microservice - Isolated service for signing Polymarket orders and allowances"
+authors = ["User <user@example.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+# FastAPI and web
+fastapi = "^0.118.0"
+uvicorn = "^0.37.0"
+python-multipart = "^0.0.20"
+
+# Pydantic
+pydantic = "^2.11.10"
+pydantic-settings = "^2.11.0"
+
+# Database
+sqlalchemy = "^2.0.43"
+asyncpg = "^0.30.0"
+psycopg2-binary = "^2.9.10"
+alembic = "^1.16.5"
+
+# Dependency Injection
+dishka = "^1.6.0"
+
+# HTTP client
+aiohttp = "^3.13.0"
+
+# Environment
+python-dotenv = "^1.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
