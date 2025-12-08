@@ -9,14 +9,61 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH with passphrase
+      env:
+        SSH_KEY: ${{ secrets.SSH_KEY }}
+        SSH_KEY_PHRASE: ${{ secrets.SSH_KEY_PHRASE }}
+      run: |
+        # Устанавливаем expect для работы с passphrase
+        sudo apt-get update -qq
+        sudo apt-get install -y expect
+        
+        # Создаем директорию для SSH
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Сохраняем приватный ключ
+        echo "$SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        
+        # Запускаем ssh-agent
+        eval $(ssh-agent -s)
+        
+        # Создаем expect скрипт для добавления ключа с passphrase
+        cat > /tmp/ssh-add.exp << 'EXPECT_EOF'
+        #!/usr/bin/expect -f
+        set timeout -1
+        spawn ssh-add ~/.ssh/deploy_key
+        expect "Enter passphrase for*"
+        send -- "$env(SSH_KEY_PHRASE)\r"
+        expect eof
+        EXPECT_EOF
+        
+        chmod +x /tmp/ssh-add.exp
+        
+        # Добавляем ключ в ssh-agent с passphrase
+        /tmp/ssh-add.exp
+        
+        # Проверяем, что ключ добавлен (показываем только отпечаток, не сам ключ)
+        ssh-add -l
+        
+        # Очищаем временные файлы с чувствительными данными
+        rm -f /tmp/ssh-add.exp
+        rm -f ~/.ssh/deploy_key
+        
+        # Добавляем сервер в known_hosts
+        ssh-keyscan -p ${{ secrets.PORT }} ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+        
+        # Сохраняем переменные ssh-agent для последующих шагов
+        echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+        echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+
     - name: Check Docker and Docker Compose access
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
+      run: |
+        ssh -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
           # Проверяем доступ к Docker
           if ! docker --version &>/dev/null; then
             echo "ERROR: Deploy user cannot access Docker"
@@ -36,15 +83,11 @@ jobs:
           echo "✅ Docker access verified for deploy user"
           echo "Docker version: $(docker --version)"
           echo "Docker Compose version: $(docker compose version)"
+        EOF
 
     - name: Deploy Privy Signing Service
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: ${{ secrets.PORT }}
-        script: |
+      run: |
+        ssh -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
           # Создаем директорию если она не существует
           sudo mkdir -p /opt/polycopy/
           sudo chown $(whoami):$(whoami) /opt/polycopy/
@@ -112,3 +155,4 @@ jobs:
           # Запускаем deploy.sh
           echo "Starting deployment..."
           ./deploy.sh
+        EOF
