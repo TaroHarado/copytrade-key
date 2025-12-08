@@ -41,26 +41,28 @@ jobs:
         # Запускаем ssh-agent
         eval $(ssh-agent -s)
         
-        # Создаем expect скрипт для добавления ключа с passphrase
-        cat > /tmp/ssh-add.exp << 'EXPECT_EOF'
-        #!/usr/bin/expect -f
-        set timeout -1
-        spawn ssh-add ~/.ssh/deploy_key
-        expect "Enter passphrase for*"
-        send -- "$env(SSH_KEY_PHRASE)\r"
-        expect eof
-        EXPECT_EOF
+        # Создаем скрипт SSH_ASKPASS для автоматического ввода passphrase
+        cat > /tmp/ssh-askpass.sh << 'ASKPASS_EOF'
+        #!/bin/bash
+        echo "$SSH_KEY_PHRASE"
+        ASKPASS_EOF
         
-        chmod +x /tmp/ssh-add.exp
+        chmod +x /tmp/ssh-askpass.sh
         
-        # Добавляем ключ в ssh-agent с passphrase
-        /tmp/ssh-add.exp
+        # Экспортируем переменные для SSH_ASKPASS
+        export SSH_ASKPASS=/tmp/ssh-askpass.sh
+        export DISPLAY=:0
+        export SSH_ASKPASS_REQUIRE=force
+        
+        # Добавляем ключ в ssh-agent с passphrase через SSH_ASKPASS
+        setsid ssh-add ~/.ssh/deploy_key < /dev/null
         
         # Проверяем, что ключ добавлен (показываем только отпечаток, не сам ключ)
+        echo "Keys in ssh-agent:"
         ssh-add -l
         
         # Очищаем временные файлы с чувствительными данными
-        rm -f /tmp/ssh-add.exp
+        rm -f /tmp/ssh-askpass.sh
         rm -f ~/.ssh/deploy_key
         
         # Добавляем сервер в known_hosts
