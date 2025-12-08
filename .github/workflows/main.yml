@@ -1,0 +1,114 @@
+name: Privy Signing Service CI/CD Pipeline
+
+on: 
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check Docker and Docker Compose access
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        script: |
+          # Проверяем доступ к Docker
+          if ! docker --version &>/dev/null; then
+            echo "ERROR: Deploy user cannot access Docker"
+            echo "Please ensure:"
+            echo "1. Docker is installed on the server"
+            echo "2. Deploy user is added to docker group: sudo usermod -aG docker deploy"
+            echo "3. Docker service is running: sudo systemctl start docker"
+            exit 1
+          fi
+          
+          if ! docker compose version &>/dev/null; then
+            echo "ERROR: Deploy user cannot access Docker Compose"
+            echo "Please ensure Docker Compose is installed and accessible"
+            exit 1
+          fi
+          
+          echo "✅ Docker access verified for deploy user"
+          echo "Docker version: $(docker --version)"
+          echo "Docker Compose version: $(docker compose version)"
+
+    - name: Deploy Privy Signing Service
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        script: |
+          # Создаем директорию если она не существует
+          sudo mkdir -p /opt/polycopy/
+          sudo chown $(whoami):$(whoami) /opt/polycopy/
+          cd /opt/polycopy/
+          
+          echo "Current working directory: $(pwd)"
+          echo "User: $(whoami)"
+          echo "Groups: $(groups)"
+          
+          if [ -d "privy-signing/.git" ]; then
+            echo "Repository exists, pulling latest changes..."
+            cd privy-signing
+            
+            # Настраиваем git для использования PAT
+            git config credential.helper store
+            echo "https://${{ secrets.GPAT }}:x-oauth-basic@github.com" > ~/.git-credentials
+            
+            git fetch origin
+            git pull origin main
+          else
+            echo "Cloning repository..."
+            
+            # Проверяем, что токен установлен
+            if [ -z "${{ secrets.GPAT }}" ]; then
+              echo "ERROR: GPAT secret is not set!"
+              exit 1
+            fi
+            
+            # Клонируем репозиторий с PAT токеном
+            if git clone https://${{ secrets.GPAT }}:x-oauth-basic@github.com/TaroHarado/polycopy-privy-signing.git privy-signing; then
+              echo "Clone successful"
+            else
+              echo "Clone failed"
+              exit 1
+            fi
+            
+            cd privy-signing
+            
+            # Настраиваем git для будущих операций
+            git config credential.helper store
+            echo "https://${{ secrets.GPAT }}:x-oauth-basic@github.com" > ~/.git-credentials
+          fi
+          
+          # Проверяем существование файлов
+          if [ -f "deploy.sh" ]; then
+            chmod +x deploy.sh
+            echo "deploy.sh found and made executable"
+          else
+            echo "Error: deploy.sh not found"
+            ls -la
+            exit 1
+          fi
+          
+          # Делаем исполняемыми startup скрипты
+          if [ -d "startup_scripts" ]; then
+            chmod +x startup_scripts/entrypoint.sh
+            chmod +x startup_scripts/wait-for-it.sh
+            echo "Startup scripts made executable"
+          fi
+
+          # Настраиваем переменные среды для деплоя
+          export GITHUB_ACTIONS=true
+          export CI=true
+
+          # Запускаем deploy.sh
+          echo "Starting deployment..."
+          ./deploy.sh

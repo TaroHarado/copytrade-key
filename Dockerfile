@@ -29,6 +29,10 @@ RUN poetry config virtualenvs.create false \
 # Copy application code
 COPY --chown=signing:signing . .
 
+# Copy startup scripts
+COPY startup_scripts/ /app/startup_scripts/
+RUN chmod +x /app/startup_scripts/*.sh
+
 # Switch to non-root user
 USER signing
 
@@ -39,5 +43,5 @@ EXPOSE 8010
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8010/health')"
 
-# Run application
-CMD ["python", "main.py"]
+# Run application via entrypoint
+CMD ["/app/startup_scripts/entrypoint.sh"]
