@@ -41,10 +41,14 @@ jobs:
         # Запускаем ssh-agent
         eval $(ssh-agent -s)
         
+        # Получаем абсолютный путь к ключу
+        KEY_PATH="${HOME}/.ssh/deploy_key"
+        echo "Using key path: ${KEY_PATH}"
+        
         # Используем expect для добавления ключа (более надежно)
         expect << EOF
         set timeout 10
-        spawn ssh-add $env(HOME)/.ssh/deploy_key
+        spawn ssh-add ${KEY_PATH}
         expect {
           "Enter passphrase*" {
             send "${SSH_KEY_PHRASE}\r"
