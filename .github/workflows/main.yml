@@ -117,7 +117,13 @@ jobs:
 
     - name: Check Docker and Docker Compose access
       run: |
-        ssh -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
+        # Проверяем, что ssh-agent доступен
+        echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"
+        echo "SSH_AGENT_PID: $SSH_AGENT_PID"
+        ssh-add -l
+        
+        # Подключаемся к серверу
+        ssh -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
           # Проверяем доступ к Docker
           if ! docker --version &>/dev/null; then
             echo "ERROR: Deploy user cannot access Docker"
@@ -141,7 +147,8 @@ jobs:
 
     - name: Deploy Privy Signing Service
       run: |
-        ssh -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
+        # Подключаемся к серверу для деплоя
+        ssh -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
           # Создаем директорию если она не существует
           sudo mkdir -p /opt/polycopy/
           sudo chown $(whoami):$(whoami) /opt/polycopy/
