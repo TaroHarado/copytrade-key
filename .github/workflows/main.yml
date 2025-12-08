@@ -45,34 +45,61 @@ jobs:
         KEY_PATH="${HOME}/.ssh/deploy_key"
         echo "Using key path: ${KEY_PATH}"
         
-        # Используем expect для добавления ключа (более надежно)
-        expect << EOF
+        # Проверяем длину passphrase (без вывода самого пароля)
+        PHRASE_LENGTH=${#SSH_KEY_PHRASE}
+        echo "Passphrase length: ${PHRASE_LENGTH} characters"
+        
+        # Сохраняем passphrase во временный файл (используем printf для безопасности)
+        PASSPHRASE_FILE=$(mktemp)
+        printf '%s' "$SSH_KEY_PHRASE" > "${PASSPHRASE_FILE}"
+        chmod 600 "${PASSPHRASE_FILE}"
+        
+        # Создаем expect скрипт в отдельном файле для лучшей обработки спецсимволов
+        EXPECT_SCRIPT=$(mktemp)
+        cat > "${EXPECT_SCRIPT}" << 'EXPECT_END'
+        #!/usr/bin/expect -f
         set timeout 10
-        spawn ssh-add ${KEY_PATH}
+        set key_path [lindex $argv 0]
+        set pass_file [lindex $argv 1]
+        
+        # Читаем passphrase из файла
+        set fp [open $pass_file r]
+        set passphrase [read $fp]
+        close $fp
+        
+        spawn ssh-add $key_path
         expect {
           "Enter passphrase*" {
-            send "${SSH_KEY_PHRASE}\r"
+            send -- "$passphrase\r"
             expect {
               "Identity added*" {
-                puts "SSH key added successfully"
+                puts "✅ SSH key added successfully"
                 exit 0
               }
               "Bad passphrase*" {
-                puts "ERROR: Bad passphrase"
+                puts "❌ ERROR: Bad passphrase - please check SSH_KEY_PHRASE secret"
                 exit 1
               }
               timeout {
-                puts "ERROR: Timeout waiting for confirmation"
+                puts "❌ ERROR: Timeout waiting for confirmation"
                 exit 1
               }
             }
           }
           timeout {
-            puts "ERROR: Timeout waiting for passphrase prompt"
+            puts "❌ ERROR: Timeout waiting for passphrase prompt"
             exit 1
           }
         }
-        EOF
+        EXPECT_END
+        
+        chmod +x "${EXPECT_SCRIPT}"
+        
+        # Запускаем expect скрипт с аргументами
+        "${EXPECT_SCRIPT}" "${KEY_PATH}" "${PASSPHRASE_FILE}"
+        
+        # Удаляем временные файлы
+        rm -f "${PASSPHRASE_FILE}" "${EXPECT_SCRIPT}"
         
         # Проверяем, что ключ добавлен (показываем только отпечаток, не сам ключ)
         echo "Keys in ssh-agent:"
