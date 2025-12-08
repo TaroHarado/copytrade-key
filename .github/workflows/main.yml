@@ -25,9 +25,18 @@ jobs:
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         
-        # Сохраняем приватный ключ
-        echo "$SSH_KEY" > ~/.ssh/deploy_key
+        # Сохраняем приватный ключ (правильно обрабатываем многострочный текст)
+        printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
         chmod 600 ~/.ssh/deploy_key
+        
+        # Проверяем, что ключ создан
+        if [ ! -f ~/.ssh/deploy_key ]; then
+          echo "ERROR: Failed to create SSH key file"
+          exit 1
+        fi
+        
+        echo "SSH key file created successfully"
+        ls -la ~/.ssh/deploy_key
         
         # Запускаем ssh-agent
         eval $(ssh-agent -s)
