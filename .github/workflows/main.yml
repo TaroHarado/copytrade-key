@@ -42,9 +42,9 @@ jobs:
         eval $(ssh-agent -s)
         
         # Создаем скрипт SSH_ASKPASS для автоматического ввода passphrase
-        cat > /tmp/ssh-askpass.sh << 'ASKPASS_EOF'
+        cat > /tmp/ssh-askpass.sh << ASKPASS_EOF
         #!/bin/bash
-        echo "$SSH_KEY_PHRASE"
+        echo "${SSH_KEY_PHRASE}"
         ASKPASS_EOF
         
         chmod +x /tmp/ssh-askpass.sh
