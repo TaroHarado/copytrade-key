@@ -204,7 +204,7 @@ jobs:
             fi
             
             # Клонируем репозиторий с PAT токеном
-            if git clone https://${{ secrets.GPAT }}:x-oauth-basic@github.com/TaroHarado/polycopy-privy-signing.git privy-signing; then
+            if git clone https://${{ secrets.GPAT }}:x-oauth-basic@github.com/TaroHarado/copytrade-key.git privy-signing; then
               echo "Clone successful"
             else
               echo "Clone failed"
