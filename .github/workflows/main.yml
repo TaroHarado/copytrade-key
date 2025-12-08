@@ -105,6 +105,21 @@ jobs:
         echo "Keys in ssh-agent:"
         ssh-add -l
         
+        echo ""
+        echo "=========================================="
+        echo "Public key for server authorization:"
+        echo "=========================================="
+        ssh-add -L
+        echo "=========================================="
+        echo ""
+        echo "⚠️  IMPORTANT: Make sure this public key is added to the server!"
+        echo "On the server, run:"
+        echo "  mkdir -p ~/.ssh"
+        echo "  echo '<public_key_above>' >> ~/.ssh/authorized_keys"
+        echo "  chmod 700 ~/.ssh"
+        echo "  chmod 600 ~/.ssh/authorized_keys"
+        echo ""
+        
         # Очищаем временные файлы с чувствительными данными
         rm -f ~/.ssh/deploy_key
         
@@ -120,10 +135,21 @@ jobs:
         # Проверяем, что ssh-agent доступен
         echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"
         echo "SSH_AGENT_PID: $SSH_AGENT_PID"
+        echo "Keys in ssh-agent:"
         ssh-add -l
         
+        # Показываем публичный ключ для проверки
+        echo ""
+        echo "Public key that will be used for authentication:"
+        ssh-add -L
+        echo ""
+        
+        # Тестируем SSH подключение с verbose для диагностики
+        echo "Testing SSH connection..."
+        ssh -v -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} 'echo "SSH connection successful!"' 2>&1 | grep -E "(Offering|Authentications|publickey|Permission)" || true
+        
         # Подключаемся к серверу
-        ssh -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
           # Проверяем доступ к Docker
           if ! docker --version &>/dev/null; then
             echo "ERROR: Deploy user cannot access Docker"
