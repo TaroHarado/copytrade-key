@@ -146,10 +146,10 @@ jobs:
         
         # Тестируем SSH подключение с verbose для диагностики
         echo "Testing SSH connection..."
-        ssh -v -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} 'echo "SSH connection successful!"' 2>&1 | grep -E "(Offering|Authentications|publickey|Permission)" || true
+        ssh -v -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} root@${{ secrets.HOST }} 'echo "SSH connection successful!"' 2>&1 | grep -E "(Offering|Authentications|publickey|Permission)" || true
         
         # Подключаемся к серверу
-        ssh -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no -o BatchMode=yes -p ${{ secrets.PORT }} root@${{ secrets.HOST }} << 'EOF'
           # Проверяем доступ к Docker
           if ! docker --version &>/dev/null; then
             echo "ERROR: Deploy user cannot access Docker"
@@ -174,7 +174,7 @@ jobs:
     - name: Deploy Privy Signing Service
       run: |
         # Подключаемся к серверу для деплоя
-        ssh -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no -p ${{ secrets.PORT }} root@${{ secrets.HOST }} << 'EOF'
           # Создаем директорию если она не существует
           sudo mkdir -p /opt/polycopy/
           sudo chown $(whoami):$(whoami) /opt/polycopy/
