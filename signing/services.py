@@ -21,10 +21,15 @@ class PrivyClient:
     """
     
     def __init__(self):
-        self.base_url = "https://auth.privy.io"
+        self.base_url = "https://api.privy.io"
         self.app_id = settings.privy_app_id
         self.app_secret = settings.privy_app_secret
         self._session: aiohttp.ClientSession | None = None
+        
+        # Basic Auth credentials
+        import base64
+        credentials = f"{self.app_id}:{self.app_secret}"
+        self.basic_auth = base64.b64encode(credentials.encode()).decode()
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session"""
@@ -63,6 +68,7 @@ class PrivyClient:
                 headers={
                     "Authorization": f"Bearer {privy_token}",
                     "privy-app-id": self.app_id,
+                    "Content-Type": "application/json"
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
@@ -114,7 +120,7 @@ class PrivyClient:
         typed_data: Dict
     ) -> str:
         """
-        Sign EIP-712 typed data via Privy API
+        Sign EIP-712 typed data via Privy API using RPC endpoint
         
         Args:
             privy_wallet_id: Privy wallet ID
@@ -131,14 +137,20 @@ class PrivyClient:
         try:
             logger.info(f"🔐 Requesting signature from Privy for wallet {privy_wallet_id[:16]}...")
             
+            # Use RPC endpoint with eth_signTypedData_v4 method
             async with session.post(
-                f"{self.base_url}/api/v1/wallets/{privy_wallet_id}/sign_typed_data",
+                f"{self.base_url}/api/v1/wallets/{privy_wallet_id}/rpc",
                 headers={
-                    "Authorization": f"Bearer {self.app_secret}",
+                    "Authorization": f"Basic {self.basic_auth}",
                     "privy-app-id": self.app_id,
                     "Content-Type": "application/json"
                 },
-                json={"typed_data": typed_data},
+                json={
+                    "method": "eth_signTypedData_v4",
+                    "params": {
+                        "data": typed_data
+                    }
+                },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
                 if response.status != 200:
@@ -147,7 +159,7 @@ class PrivyClient:
                     raise Exception(f"Privy API error ({response.status}): {error_text}")
                 
                 result = await response.json()
-                signature = result.get("signature")
+                signature = result.get("data")
                 
                 if not signature:
                     raise Exception("Privy API did not return signature")
