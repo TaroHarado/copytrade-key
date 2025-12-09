@@ -37,6 +37,77 @@ class PrivyClient:
         if self._session and not self._session.closed:
             await self._session.close()
     
+    async def verify_token(self, privy_token: str) -> Dict:
+        """
+        Verify Privy access token and get user data
+        
+        Args:
+            privy_token: Privy access token from frontend
+            
+        Returns:
+            Dict with user data including:
+            - user_id: Privy user ID
+            - wallet_address: Embedded wallet address
+            - wallet_id: Privy wallet ID
+            
+        Raises:
+            Exception: If token is invalid or Privy API returns error
+        """
+        session = await self._get_session()
+        
+        try:
+            logger.info(f"🔐 Verifying Privy token: {privy_token[:16]}...")
+            
+            async with session.get(
+                f"{self.base_url}/api/v1/users/me",
+                headers={
+                    "Authorization": f"Bearer {privy_token}",
+                    "privy-app-id": self.app_id,
+                },
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"❌ Privy token verification failed (status {response.status}): {error_text}")
+                    raise Exception(f"Invalid Privy token ({response.status}): {error_text}")
+                
+                user_data = await response.json()
+                
+                # Extract user ID
+                user_id = user_data.get("id")
+                if not user_id:
+                    raise Exception("Privy API did not return user ID")
+                
+                # Extract embedded wallet (created by Privy SDK on frontend)
+                linked_accounts = user_data.get("linked_accounts", [])
+                embedded_wallet = None
+                
+                for account in linked_accounts:
+                    if account.get("type") == "wallet" and account.get("wallet_client") == "privy":
+                        embedded_wallet = account
+                        break
+                
+                if not embedded_wallet:
+                    raise Exception("No Privy embedded wallet found for user")
+                
+                wallet_address = embedded_wallet.get("address")
+                wallet_id = embedded_wallet.get("wallet_id")
+                
+                if not wallet_address or not wallet_id:
+                    raise Exception("Invalid embedded wallet data from Privy")
+                
+                logger.info(f"✅ Token verified for user {user_id}, wallet {wallet_address}")
+                
+                return {
+                    "user_id": user_id,
+                    "wallet_address": wallet_address,
+                    "wallet_id": wallet_id
+                }
+        
+        except aiohttp.ClientError as e:
+            logger.error(f"❌ Privy API connection error: {e}")
+            raise Exception(f"Failed to connect to Privy API: {e}")
+    
     async def sign_typed_data(
         self,
         privy_wallet_id: str,

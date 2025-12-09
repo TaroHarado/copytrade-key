@@ -251,3 +251,33 @@ class SignatureResponse(BaseModel):
     audit_id: int
     timestamp: str
 
+
+# ===== VALIDATORS ДЛЯ PRIVY ОПЕРАЦИЙ =====
+
+class VerifyPrivyTokenRequest(BaseModel):
+    """
+    Request для валидации Privy токена
+    
+    Используется backend для проверки privy_token от фронтенда.
+    НЕ требует target_activity_id так как это операция авторизации.
+    
+    ВАЖНО: Embedded wallet должен быть создан на фронтенде через Privy SDK.
+    """
+    privy_token: str = Field(min_length=10, description="Privy access token from frontend")
+
+
+class VerifyPrivyTokenResponse(BaseModel):
+    """
+    Response после валидации Privy токена
+    
+    Возвращает информацию о пользователе из Privy.
+    ТОЛЬКО Privy embedded wallet (один кошелек на пользователя).
+    """
+    success: bool
+    error: str | None = None
+    
+    # User data from Privy
+    privy_user_id: str | None = None
+    internal_wallet_address: str | None = None  # Privy embedded wallet (единственный)
+    wallet_id: str | None = None  # ID для подписи через API
+

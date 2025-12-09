@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from signing.repositories import SignatureAuditRepository
 from signing.services import PrivyClient
 from signing.usecases import SignOrderUseCase, SignAllowanceUseCase, SignTransferUseCase
+from signing.privy_usecases import VerifyPrivyTokenUseCase
 from copytrading.repositories import CopytradingValidationRepository
 from core.security import SecurityManager
 
@@ -84,3 +85,11 @@ class SigningProvider(Provider):
             validation_repository=validation_repository,
             security_manager=security_manager
         )
+    
+    @provide
+    def get_verify_privy_token_usecase(
+        self,
+        privy_client: Annotated[PrivyClient, FromComponent("signing")]
+    ) -> VerifyPrivyTokenUseCase:
+        """Get verify Privy token use case"""
+        return VerifyPrivyTokenUseCase(privy_client=privy_client)
