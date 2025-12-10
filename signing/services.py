@@ -46,6 +46,9 @@ class PrivyClient:
         """
         Verify Privy access token and get user data
         
+        Uses Privy's server-side verification endpoint with app credentials.
+        This is more secure than client-side verification.
+        
         Args:
             privy_token: Privy access token from frontend
             
@@ -63,12 +66,16 @@ class PrivyClient:
         try:
             logger.info(f"🔐 Verifying Privy token: {privy_token[:16]}...")
             
-            async with session.get(
-                f"{self.base_url}/api/v1/users/me",
+            # Use server-side verification endpoint
+            # https://docs.privy.io/guide/server/verification/access-tokens
+            async with session.post(
+                f"{self.base_url}/v1/apps/{self.app_id}/tokens/verify",
                 headers={
-                    "Authorization": f"Bearer {privy_token}",
-                    "privy-app-id": self.app_id,
+                    "Authorization": f"Basic {self.basic_auth}",
                     "Content-Type": "application/json"
+                },
+                json={
+                    "token": privy_token
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
@@ -77,37 +84,41 @@ class PrivyClient:
                     logger.error(f"❌ Privy token verification failed (status {response.status}): {error_text}")
                     raise Exception(f"Invalid Privy token ({response.status}): {error_text}")
                 
-                user_data = await response.json()
+                result = await response.json()
                 
-                # Extract user ID
-                user_id = user_data.get("id")
+                # Extract user ID from verification result
+                user_id = result.get("user_id") or result.get("sub")
                 if not user_id:
+                    logger.error(f"❌ No user ID in verification result: {result}")
                     raise Exception("Privy API did not return user ID")
                 
-                # Extract embedded wallet (created by Privy SDK on frontend)
-                linked_accounts = user_data.get("linked_accounts", [])
-                embedded_wallet = None
+                logger.info(f"✅ Token verified for user {user_id}")
                 
-                for account in linked_accounts:
-                    if account.get("type") == "wallet" and account.get("wallet_client") == "privy":
-                        embedded_wallet = account
-                        break
-                
-                if not embedded_wallet:
-                    raise Exception("No Privy embedded wallet found for user")
-                
-                wallet_address = embedded_wallet.get("address")
-                wallet_id = embedded_wallet.get("wallet_id")
-                
-                if not wallet_address or not wallet_id:
-                    raise Exception("Invalid embedded wallet data from Privy")
-                
-                logger.info(f"✅ Token verified for user {user_id}, wallet {wallet_address}")
-                
-                return {
-                    "id": user_id,  # Changed from "user_id" to "id" to match expected format
-                    "linked_accounts": linked_accounts  # Return full linked_accounts for processing
-                }
+                # Now get full user data with linked accounts
+                async with session.get(
+                    f"{self.base_url}/v1/users/{user_id}",
+                    headers={
+                        "Authorization": f"Basic {self.basic_auth}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as user_response:
+                    if user_response.status != 200:
+                        error_text = await user_response.text()
+                        logger.warning(f"⚠️ Failed to get user data (status {user_response.status}): {error_text}")
+                        # Fallback: return minimal data
+                        return {
+                            "id": user_id,
+                            "linked_accounts": []
+                        }
+                    
+                    user_data = await user_response.json()
+                    logger.info(f"✅ Got user data with {len(user_data.get('linked_accounts', []))} linked accounts")
+                    
+                    return {
+                        "id": user_id,
+                        "linked_accounts": user_data.get("linked_accounts", [])
+                    }
         
         except aiohttp.ClientError as e:
             logger.error(f"❌ Privy API connection error: {e}")
