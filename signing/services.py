@@ -105,9 +105,8 @@ class PrivyClient:
                 logger.info(f"✅ Token verified for user {user_id}, wallet {wallet_address}")
                 
                 return {
-                    "user_id": user_id,
-                    "wallet_address": wallet_address,
-                    "wallet_id": wallet_id
+                    "id": user_id,  # Changed from "user_id" to "id" to match expected format
+                    "linked_accounts": linked_accounts  # Return full linked_accounts for processing
                 }
         
         except aiohttp.ClientError as e:
