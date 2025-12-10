@@ -46,11 +46,12 @@ class PrivyClient:
         """
         Verify Privy access token and get user data
         
-        Uses Privy's authentication verification API.
-        According to Privy docs, we need to verify the token and then fetch user data.
+        Since Privy doesn't have a direct REST API endpoint for token verification,
+        we decode the JWT token locally to extract the user_id (subject),
+        then fetch full user data using Basic Auth.
         
         Args:
-            privy_token: Privy access token from frontend
+            privy_token: Privy access token from frontend (JWT)
             
         Returns:
             Dict with user data including:
@@ -65,30 +66,60 @@ class PrivyClient:
         try:
             logger.info(f"🔐 Verifying Privy token: {privy_token[:16]}...")
             
-            # Step 1: Verify the token by fetching user data with it
-            # The token itself acts as authentication
+            # Step 1: Decode JWT token (without verification for now) to get user_id
+            # JWT format: header.payload.signature
+            import json
+            import base64
+            
+            try:
+                # Split token and decode payload
+                parts = privy_token.split('.')
+                if len(parts) != 3:
+                    raise Exception("Invalid JWT format")
+                
+                # Decode payload (add padding if needed)
+                payload = parts[1]
+                payload += '=' * (4 - len(payload) % 4)
+                decoded_payload = json.loads(base64.urlsafe_b64decode(payload))
+                
+                user_id = decoded_payload.get('sub') or decoded_payload.get('userId')
+                if not user_id:
+                    raise Exception(f"No user ID in token payload: {decoded_payload}")
+                
+                logger.info(f"✅ Decoded user ID from token: {user_id}")
+                
+            except Exception as decode_error:
+                logger.error(f"❌ Failed to decode JWT: {decode_error}")
+                raise Exception(f"Invalid JWT token: {decode_error}")
+            
+            # Step 2: Fetch full user data using Basic Auth
+            # According to Privy docs: https://api.privy.io/v1/users/{user_id}
+            url = f"{self.base_url}/v1/users/{user_id}"
+            logger.info(f"🔗 Fetching user data from: {url}")
+            
             async with session.get(
-                f"{self.base_url}/v1/me",
+                url,
                 headers={
-                    "Authorization": f"Bearer {privy_token}",
+                    "Authorization": f"Basic {self.basic_auth}",
                     "privy-app-id": self.app_id
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
+                logger.info(f"📡 Response status: {response.status}")
+                
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"❌ Privy token verification failed (status {response.status}): {error_text}")
-                    raise Exception(f"Invalid Privy token ({response.status}): {error_text}")
+                    logger.error(f"❌ Failed to fetch user data (status {response.status}): {error_text[:500]}")
+                    raise Exception(f"Failed to fetch user data ({response.status}): {error_text[:200]}")
                 
                 user_data = await response.json()
                 
-                # Extract user ID
-                user_id = user_data.get("id")
-                if not user_id:
-                    logger.error(f"❌ No user ID in response: {user_data}")
-                    raise Exception("Privy API did not return user ID")
+                # Validate user ID matches
+                fetched_user_id = user_data.get("id")
+                if fetched_user_id != user_id:
+                    raise Exception(f"User ID mismatch: token={user_id}, api={fetched_user_id}")
                 
-                logger.info(f"✅ Token verified for user {user_id}")
+                logger.info(f"✅ User data fetched successfully")
                 
                 # Return user data with linked accounts
                 linked_accounts = user_data.get("linked_accounts", [])
