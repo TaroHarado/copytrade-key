@@ -155,38 +155,65 @@ class PrivyClient:
         session = await self._get_session()
         
         try:
-            logger.info(f"🔐 Requesting signature from Privy for wallet {privy_wallet_id[:30]}...")
-            logger.info(f"📋 Full wallet ID received: {privy_wallet_id}")
+            logger.info(f"🔐 Requesting signature from Privy for wallet ID: {privy_wallet_id}")
             
-            # Parse wallet DID format
-            # Expected formats:
-            # 1. Full DID: did:privy:{user_id}:wallet:{index}  (stored in DB)
-            # 2. API format: did:privy:{user_id}  (what Privy API expects)
-            
+            # wallet_id должен приходить напрямую из Privy API (account["id"])
+            # Но для legacy support: если приходит старый формат did:privy:xxx:wallet:0,
+            # попробуем получить правильный wallet_id через Privy API
             wallet_id_for_api = privy_wallet_id
             
-            if privy_wallet_id.startswith("did:privy:"):
+            # Legacy format check: did:privy:{user_id}:wallet:{index}
+            if privy_wallet_id.startswith("did:privy:") and privy_wallet_id.count(":") >= 4:
                 parts = privy_wallet_id.split(":")
-                logger.info(f"🔍 Parsing DID format, parts count: {len(parts)}, parts: {parts}")
-                
-                # Format: ['did', 'privy', '{user_id}', 'wallet', '{index}']
                 if len(parts) == 5 and parts[3] == "wallet":
-                    # Extract just user ID part: did:privy:{user_id}
-                    user_id_part = parts[2]
-                    wallet_id_for_api = f"did:privy:{user_id_part}"
-                    logger.info(f"✂️ Extracted user-only DID for API: {wallet_id_for_api}")
-                elif len(parts) == 3:
-                    # Already in correct format: did:privy:{user_id}
-                    wallet_id_for_api = privy_wallet_id
-                    logger.info(f"✅ DID already in API format: {wallet_id_for_api}")
-                else:
-                    logger.warning(f"⚠️ Unexpected DID format with {len(parts)} parts, using as-is")
+                    logger.warning(
+                        f"⚠️ LEGACY FORMAT DETECTED: {privy_wallet_id}\n"
+                        f"This is old format from DB. Need to fetch correct wallet_id from Privy API."
+                    )
+                    # Извлекаем user_id и пытаемся получить правильный wallet_id
+                    user_id = f"did:privy:{parts[2]}"
+                    wallet_index = parts[4]
+                    
+                    try:
+                        # Получаем информацию о пользователе
+                        logger.info(f"📡 Fetching user data to get correct wallet_id for {user_id}")
+                        url = f"{self.base_url}/v1/users/{user_id}"
+                        async with session.get(
+                            url,
+                            headers={
+                                "Authorization": f"Basic {self.basic_auth}",
+                                "privy-app-id": self.app_id
+                            },
+                            timeout=aiohttp.ClientTimeout(total=10)
+                        ) as user_response:
+                            if user_response.status == 200:
+                                user_data = await user_response.json()
+                                linked_accounts = user_data.get("linked_accounts", [])
+                                
+                                # Ищем нужный wallet
+                                for account in linked_accounts:
+                                    if (account.get("type") == "wallet" and 
+                                        account.get("wallet_client") == "privy" and
+                                        account.get("chain_type") == "ethereum" and
+                                        str(account.get("wallet_index", 0)) == wallet_index):
+                                        
+                                        correct_wallet_id = account.get("id")
+                                        if correct_wallet_id:
+                                            wallet_id_for_api = correct_wallet_id
+                                            logger.info(f"✅ Found correct wallet_id: {correct_wallet_id}")
+                                            break
+                    except Exception as e:
+                        logger.error(f"❌ Failed to fetch correct wallet_id: {e}")
+                        logger.info("Will try with legacy format anyway...")
             
-            api_url = f"{self.base_url}/api/v1/wallets/{wallet_id_for_api}/rpc"
+            # Формируем правильный URL согласно Privy API документации
+            # Правильный путь: /v1/wallets/{wallet_id}/rpc (БЕЗ /api/)
+            api_url = f"{self.base_url}/v1/wallets/{wallet_id_for_api}/rpc"
             logger.info(f"🌐 API URL: {api_url}")
             logger.info(f"📤 Request payload: method=eth_signTypedData_v4, typed_data keys: {list(typed_data.keys())}")
             
             # Use RPC endpoint with eth_signTypedData_v4 method
+            # Correct Privy API format according to docs
             async with session.post(
                 api_url,
                 headers={
@@ -197,23 +224,34 @@ class PrivyClient:
                 json={
                     "method": "eth_signTypedData_v4",
                     "params": {
-                        "data": typed_data
+                        "typed_data": typed_data
                     }
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
-                response_text = await response.text()
                 logger.info(f"📥 Response status: {response.status}")
-                logger.info(f"📥 Response body: {response_text[:500]}")
+                response_text = await response.text()
                 
                 if response.status != 200:
                     logger.error(f"❌ Privy API error (status {response.status}): {response_text}")
                     raise Exception(f"Privy API error ({response.status}): {response_text}")
                 
+                logger.info(f"📥 Response body (first 500 chars): {response_text[:500]}")
+                
                 result = await response.json()
-                signature = result.get("data")
+                logger.info(f"📥 Response JSON keys: {list(result.keys())}")
+                
+                # According to Privy docs, response format is:
+                # {"method": "eth_signTypedData_v4", "data": {"signature": "0x...", "encoding": "hex"}}
+                data = result.get("data", {})
+                if isinstance(data, dict):
+                    signature = data.get("signature")
+                else:
+                    # Fallback: maybe data is the signature directly
+                    signature = result.get("data")
                 
                 if not signature:
+                    logger.error(f"❌ No signature in response. Full response: {result}")
                     raise Exception("Privy API did not return signature")
                 
                 logger.info(f"✅ Signature received from Privy: {signature[:16]}...")

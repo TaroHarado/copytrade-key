@@ -71,11 +71,13 @@ class VerifyPrivyTokenUseCase:
                     account.get("wallet_client") == "privy" and
                     account.get("chain_type") == "ethereum"):
                     wallet_address = account.get("address")
-                    wallet_id = f"{privy_user_id}:wallet:{account.get('wallet_index', 0)}"
+                    # ВАЖНО: используем ID из Privy API, а не создаем вручную!
+                    wallet_id = account.get("id")
+                    logger.info(f"[VerifyPrivyToken] Found embedded wallet: address={wallet_address}, id={wallet_id}")
                     break
             
-            if not wallet_address:
-                logger.error("[VerifyPrivyToken] Privy embedded wallet не найден")
+            if not wallet_address or not wallet_id:
+                logger.error("[VerifyPrivyToken] Privy embedded wallet не найден или ID отсутствует")
                 return False, "No Privy embedded wallet found. Please create wallet on frontend."
             
             logger.info(f"[VerifyPrivyToken] ✅ Токен валиден, wallet: {wallet_address}")
