@@ -41,6 +41,11 @@ class SignatureAuditRepository:
         Returns:
             Created entity
         """
+        # Truncate error message if too long (DB limit is 500 chars)
+        truncated_error = error
+        if error and len(error) > 490:
+            truncated_error = error[:490] + "...[TRUNCATED]"
+        
         audit_log = SignatureAuditLog(
             signature_type=signature_type,
             user_id=user_id,
@@ -48,7 +53,7 @@ class SignatureAuditRepository:
             target_activity_id=target_activity_id,
             signature=signature,
             success=success,
-            error=error,
+            error=truncated_error,
             is_order_signed=is_order_signed,
             is_commission_signed=is_commission_signed,
             ip_address=ip_address,

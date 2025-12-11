@@ -298,6 +298,7 @@ class PrivyClient:
         
         salt = random.randint(0, 2**256 - 1)
         
+        # Privy API expects snake_case format for primary_type
         return {
             "domain": {
                 "name": "Polymarket CTF Exchange",
@@ -321,7 +322,7 @@ class PrivyClient:
                     {"name": "signatureType", "type": "uint8"}
                 ]
             },
-            "primaryType": "Order",
+            "primary_type": "Order",  # snake_case for Privy API
             "message": {
                 "salt": salt,
                 "maker": maker_address,
@@ -379,7 +380,7 @@ class PrivyClient:
                     {"name": "deadline", "type": "uint256"}
                 ]
             },
-            "primaryType": "Permit",
+            "primary_type": "Permit",  # snake_case for Privy API
             "message": {
                 "owner": owner_address,
                 "spender": spender_address,
