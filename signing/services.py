@@ -24,9 +24,10 @@ class PrivyClient:
         self.base_url = "https://api.privy.io"
         self.app_id = settings.privy_app_id
         self.app_secret = settings.privy_app_secret
+        self.authorization_private_key = settings.privy_authorization_private_key
         self._session: aiohttp.ClientSession | None = None
         
-        # Basic Auth credentials
+        # Basic Auth credentials (для non-signing операций)
         import base64
         credentials = f"{self.app_id}:{self.app_secret}"
         self.basic_auth = base64.b64encode(credentials.encode()).decode()
@@ -140,7 +141,10 @@ class PrivyClient:
         typed_data: Dict
     ) -> str:
         """
-        Sign EIP-712 typed data via Privy API using RPC endpoint
+        Sign EIP-712 typed data via Privy API using delegated actions (session signers)
+        
+        Использует authorization private key для подписи запроса.
+        Это позволяет подписывать транзакции когда пользователь offline.
         
         Args:
             privy_wallet_id: Privy wallet ID (can be full DID or just wallet address)
@@ -212,21 +216,32 @@ class PrivyClient:
             logger.info(f"🌐 API URL: {api_url}")
             logger.info(f"📤 Request payload: method=eth_signTypedData_v4, typed_data keys: {list(typed_data.keys())}")
             
-            # Use RPC endpoint with eth_signTypedData_v4 method
-            # Correct Privy API format according to docs
+            # Подготовка body для запроса
+            request_body = {
+                "method": "eth_signTypedData_v4",
+                "params": {
+                    "typed_data": typed_data
+                }
+            }
+            
+            # Генерируем authorization signature для delegated action
+            from signing.authorization_signer import get_authorization_headers
+            
+            headers = get_authorization_headers(
+                private_key_base64=self.authorization_private_key,
+                method="POST",
+                url=api_url,
+                body=request_body,
+                app_id=self.app_id
+            )
+            
+            logger.info("📝 Using authorization signature (delegated action / session signer)")
+            
+            # Выполняем запрос с authorization signature
             async with session.post(
                 api_url,
-                headers={
-                    "Authorization": f"Basic {self.basic_auth}",
-                    "privy-app-id": self.app_id,
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "method": "eth_signTypedData_v4",
-                    "params": {
-                        "typed_data": typed_data
-                    }
-                },
+                headers=headers,
+                json=request_body,
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
                 logger.info(f"📥 Response status: {response.status}")

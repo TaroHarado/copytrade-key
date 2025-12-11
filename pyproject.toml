@@ -29,6 +29,9 @@ dishka = "^1.6.0"
 # HTTP client
 aiohttp = "^3.13.0"
 
+# Cryptography (для ECDSA подписи запросов к Privy API)
+cryptography = "^44.0.0"
+
 # Environment
 python-dotenv = "^1.1.1"
 
