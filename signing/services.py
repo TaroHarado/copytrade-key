@@ -143,7 +143,7 @@ class PrivyClient:
         Sign EIP-712 typed data via Privy API using RPC endpoint
         
         Args:
-            privy_wallet_id: Privy wallet ID
+            privy_wallet_id: Privy wallet ID (can be full DID or just wallet address)
             typed_data: EIP-712 structured data
             
         Returns:
@@ -155,11 +155,40 @@ class PrivyClient:
         session = await self._get_session()
         
         try:
-            logger.info(f"🔐 Requesting signature from Privy for wallet {privy_wallet_id[:16]}...")
+            logger.info(f"🔐 Requesting signature from Privy for wallet {privy_wallet_id[:30]}...")
+            logger.info(f"📋 Full wallet ID received: {privy_wallet_id}")
+            
+            # Parse wallet DID format
+            # Expected formats:
+            # 1. Full DID: did:privy:{user_id}:wallet:{index}  (stored in DB)
+            # 2. API format: did:privy:{user_id}  (what Privy API expects)
+            
+            wallet_id_for_api = privy_wallet_id
+            
+            if privy_wallet_id.startswith("did:privy:"):
+                parts = privy_wallet_id.split(":")
+                logger.info(f"🔍 Parsing DID format, parts count: {len(parts)}, parts: {parts}")
+                
+                # Format: ['did', 'privy', '{user_id}', 'wallet', '{index}']
+                if len(parts) == 5 and parts[3] == "wallet":
+                    # Extract just user ID part: did:privy:{user_id}
+                    user_id_part = parts[2]
+                    wallet_id_for_api = f"did:privy:{user_id_part}"
+                    logger.info(f"✂️ Extracted user-only DID for API: {wallet_id_for_api}")
+                elif len(parts) == 3:
+                    # Already in correct format: did:privy:{user_id}
+                    wallet_id_for_api = privy_wallet_id
+                    logger.info(f"✅ DID already in API format: {wallet_id_for_api}")
+                else:
+                    logger.warning(f"⚠️ Unexpected DID format with {len(parts)} parts, using as-is")
+            
+            api_url = f"{self.base_url}/api/v1/wallets/{wallet_id_for_api}/rpc"
+            logger.info(f"🌐 API URL: {api_url}")
+            logger.info(f"📤 Request payload: method=eth_signTypedData_v4, typed_data keys: {list(typed_data.keys())}")
             
             # Use RPC endpoint with eth_signTypedData_v4 method
             async with session.post(
-                f"{self.base_url}/api/v1/wallets/{privy_wallet_id}/rpc",
+                api_url,
                 headers={
                     "Authorization": f"Basic {self.basic_auth}",
                     "privy-app-id": self.app_id,
@@ -173,10 +202,13 @@ class PrivyClient:
                 },
                 timeout=aiohttp.ClientTimeout(total=10)
             ) as response:
+                response_text = await response.text()
+                logger.info(f"📥 Response status: {response.status}")
+                logger.info(f"📥 Response body: {response_text[:500]}")
+                
                 if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(f"❌ Privy API error (status {response.status}): {error_text}")
-                    raise Exception(f"Privy API error ({response.status}): {error_text}")
+                    logger.error(f"❌ Privy API error (status {response.status}): {response_text}")
+                    raise Exception(f"Privy API error ({response.status}): {response_text}")
                 
                 result = await response.json()
                 signature = result.get("data")

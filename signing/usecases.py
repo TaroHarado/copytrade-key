@@ -131,6 +131,7 @@ class SignOrderUseCase:
             )
             
             # 4. Sign via Privy
+            logger.info(f"📝 Signing order with privy_wallet_id={request.privy_wallet_id}")
             signature = await self.privy_client.sign_typed_data(
                 privy_wallet_id=request.privy_wallet_id,
                 typed_data=typed_data
