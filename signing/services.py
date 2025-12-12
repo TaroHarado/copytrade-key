@@ -234,7 +234,8 @@ class PrivyClient:
                 method="POST",
                 url=api_url,
                 body=request_body,
-                app_id=self.app_id
+                app_id=self.app_id,
+                app_secret=self.app_secret
             )
             
             logger.info("📝 Using authorization signature (delegated action / session signer)")

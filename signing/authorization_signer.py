@@ -28,6 +28,7 @@ def sign_privy_request(
     url: str,
     body: Dict[str, Any],
     app_id: str,
+    app_secret: str,
     idempotency_key: str | None = None
 ) -> str:
     """
@@ -42,6 +43,7 @@ def sign_privy_request(
         url: Полный URL запроса (без trailing slash)
         body: JSON body запроса
         app_id: Privy App ID
+        app_secret: Privy App Secret
         idempotency_key: Опциональный ключ идемпотентности
         
     Returns:
@@ -52,11 +54,12 @@ def sign_privy_request(
     """
     try:
         # 1. Строим payload для подписи
-        # ВАЖНО: в headers должны быть ВСЕ заголовки, которые будут в запросе
-        # (кроме самой подписи privy-authorization-signature)
+        # ВАЖНО: в headers должны быть ТОЛЬКО Privy-specific заголовки (с префиксом 'privy-')
+        # НЕ включаем: Authorization, Content-Type, trace headers
+        # Согласно документации: https://docs.privy.io/controls/authorization-keys/using-owners/sign/direct-implementation
+        
         headers = {
-            "privy-app-id": app_id,
-            "Content-Type": "application/json"
+            "privy-app-id": app_id
         }
         if idempotency_key:
             headers["privy-idempotency-key"] = idempotency_key
@@ -143,12 +146,14 @@ def get_authorization_headers(
     url: str,
     body: Dict[str, Any],
     app_id: str,
+    app_secret: str,
     idempotency_key: str | None = None
 ) -> Dict[str, str]:
     """
     Генерирует все необходимые заголовки для запроса к Privy API
     
     Включает:
+    - Authorization (Basic Auth)
     - privy-app-id
     - privy-authorization-public-key
     - privy-authorization-signature
@@ -161,6 +166,7 @@ def get_authorization_headers(
         url: Полный URL запроса
         body: JSON body запроса
         app_id: Privy App ID
+        app_secret: Privy App Secret
         idempotency_key: Опциональный ключ идемпотентности
         
     Returns:
@@ -172,10 +178,17 @@ def get_authorization_headers(
         url=url,
         body=body,
         app_id=app_id,
+        app_secret=app_secret,
         idempotency_key=idempotency_key
     )
     
+    # Basic Auth для Privy API
+    import base64
+    credentials = f"{app_id}:{app_secret}"
+    basic_auth = base64.b64encode(credentials.encode()).decode()
+    
     headers = {
+        "Authorization": f"Basic {basic_auth}",
         "privy-app-id": app_id,
         "privy-authorization-public-key": public_key_base64,
         "privy-authorization-signature": signature,
