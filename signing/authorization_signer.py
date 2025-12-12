@@ -128,6 +128,7 @@ def sign_privy_request(
 
 def get_authorization_headers(
     private_key_base64: str,
+    public_key_base64: str,
     method: str,
     url: str,
     body: Dict[str, Any],
@@ -139,11 +140,18 @@ def get_authorization_headers(
     
     Включает:
     - privy-app-id
+    - privy-authorization-public-key
     - privy-authorization-signature
     - privy-idempotency-key (если передан)
     
     Args:
-        Те же что и в sign_privy_request
+        private_key_base64: Base64-encoded private key (без PEM заголовков)
+        public_key_base64: Base64-encoded public key (без PEM заголовков)
+        method: HTTP метод
+        url: Полный URL запроса
+        body: JSON body запроса
+        app_id: Privy App ID
+        idempotency_key: Опциональный ключ идемпотентности
         
     Returns:
         Dict с заголовками для запроса
@@ -159,6 +167,7 @@ def get_authorization_headers(
     
     headers = {
         "privy-app-id": app_id,
+        "privy-authorization-public-key": public_key_base64,
         "privy-authorization-signature": signature,
         "Content-Type": "application/json"
     }

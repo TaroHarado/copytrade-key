@@ -15,9 +15,11 @@ class Settings(BaseSettings):
     privy_app_id: str
     privy_app_secret: str
     
-    # Privy authorization key (для delegated actions / session signers)
-    # Это private key из private.pem (base64 encoded, без PEM обертки)
+    # Privy authorization keys (для delegated actions / session signers)
+    # Private key из private.pem (base64 encoded, без PEM обертки)
     privy_authorization_private_key: str
+    # Public key из public.pem (base64 encoded, без PEM обертки)
+    privy_authorization_public_key: str
     
     # Database (audit logs)
     database_dialect: str = "postgresql"

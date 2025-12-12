@@ -25,6 +25,7 @@ class PrivyClient:
         self.app_id = settings.privy_app_id
         self.app_secret = settings.privy_app_secret
         self.authorization_private_key = settings.privy_authorization_private_key
+        self.authorization_public_key = settings.privy_authorization_public_key
         self._session: aiohttp.ClientSession | None = None
         
         # Basic Auth credentials (для non-signing операций)
@@ -229,6 +230,7 @@ class PrivyClient:
             
             headers = get_authorization_headers(
                 private_key_base64=self.authorization_private_key,
+                public_key_base64=self.authorization_public_key,
                 method="POST",
                 url=api_url,
                 body=request_body,
