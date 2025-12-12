@@ -52,7 +52,12 @@ def sign_privy_request(
     """
     try:
         # 1. Строим payload для подписи
-        headers = {"privy-app-id": app_id}
+        # ВАЖНО: в headers должны быть ВСЕ заголовки, которые будут в запросе
+        # (кроме самой подписи privy-authorization-signature)
+        headers = {
+            "privy-app-id": app_id,
+            "Content-Type": "application/json"
+        }
         if idempotency_key:
             headers["privy-idempotency-key"] = idempotency_key
         
@@ -71,6 +76,7 @@ def sign_privy_request(
         # 3. Парсим private key
         # Убираем префикс wallet-auth: если есть
         private_key_string = private_key_base64.replace("wallet-auth:", "").strip()
+        logger.debug(f"Private key length: {len(private_key_string)} chars")
         
         # 4. Загружаем private key
         # По умолчанию предполагаем, что ключ без PEM заголовков (просто base64)

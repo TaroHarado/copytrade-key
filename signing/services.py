@@ -238,6 +238,8 @@ class PrivyClient:
             )
             
             logger.info("📝 Using authorization signature (delegated action / session signer)")
+            logger.debug(f"📋 Request headers: {list(headers.keys())}")
+            logger.debug(f"📋 Authorization public key (first 50 chars): {self.authorization_public_key[:50]}...")
             
             # Выполняем запрос с authorization signature
             async with session.post(
