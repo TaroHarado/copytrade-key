@@ -84,12 +84,11 @@ def sign_privy_request(
         # Убираем префикс wallet-auth: если есть
         private_key_string = private_key_base64.replace("wallet-auth:", "").strip()
         
-        # 4. Загружаем private key в формате PKCS#8 (как в документации Privy)
-        private_key_pem = (
-            f"-----BEGIN PRIVATE KEY-----\n{private_key_string}\n-----END PRIVATE KEY-----"
-        )
-        private_key = serialization.load_pem_private_key(
-            private_key_pem.encode("utf-8"),
+        # 4. Декодируем base64 и загружаем как DER (не PEM!)
+        # Ключ приходит в чистом base64 формате (DER-encoded)
+        private_key_der = base64.b64decode(private_key_string)
+        private_key = serialization.load_der_private_key(
+            private_key_der,
             password=None
         )
         
