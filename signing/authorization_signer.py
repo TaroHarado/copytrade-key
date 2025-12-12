@@ -69,9 +69,13 @@ def sign_privy_request(
             "headers": headers
         }
         
+        logger.info(f"🔐 Signing payload - method: {method}, url: {url}")
+        logger.info(f"🔐 Payload headers: {list(headers.keys())}")
+        logger.info(f"🔐 Payload body keys: {list(body.keys()) if isinstance(body, dict) else 'not a dict'}")
+        
         # 2. Канонизируем JSON
         serialized_payload = canonicalize_json(payload)
-        logger.debug(f"Canonicalized payload: {serialized_payload[:200]}...")
+        logger.debug(f"Canonicalized payload: {serialized_payload[:300]}...")
         
         # 3. Парсим private key
         # Убираем префикс wallet-auth: если есть
