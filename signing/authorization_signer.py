@@ -34,7 +34,10 @@ def sign_privy_request(
     Подписывает запрос к Privy API используя authorization private key
     
     Args:
-        private_key_base64: Base64-encoded private key (без PEM обертки) или с ней
+        private_key_base64: Base64-encoded private key.
+                           По умолчанию ожидается без PEM заголовков (чистый base64).
+                           Поддерживаются форматы: EC PRIVATE KEY (SEC1) и PRIVATE KEY (PKCS#8).
+                           Также можно передать с PEM заголовками.
         method: HTTP метод ('POST', 'PUT', 'PATCH', 'DELETE')
         url: Полный URL запроса (без trailing slash)
         body: JSON body запроса
@@ -67,21 +70,44 @@ def sign_privy_request(
         
         # 3. Парсим private key
         # Убираем префикс wallet-auth: если есть
-        private_key_string = private_key_base64.replace("wallet-auth:", "")
-        
-        # Конвертируем в PEM формат если нужно
-        if not private_key_string.startswith("-----BEGIN"):
-            private_key_pem = (
-                f"-----BEGIN PRIVATE KEY-----\n{private_key_string}\n-----END PRIVATE KEY-----"
-            )
-        else:
-            private_key_pem = private_key_string
+        private_key_string = private_key_base64.replace("wallet-auth:", "").strip()
         
         # 4. Загружаем private key
-        private_key = serialization.load_pem_private_key(
-            private_key_pem.encode("utf-8"),
-            password=None
-        )
+        # По умолчанию предполагаем, что ключ без PEM заголовков (просто base64)
+        if not private_key_string.startswith("-----BEGIN"):
+            # Пробуем оба формата: сначала EC PRIVATE KEY (SEC1), потом PRIVATE KEY (PKCS#8)
+            try:
+                # Формат EC PRIVATE KEY (SEC1) - стандартный для EC ключей
+                private_key_pem = (
+                    f"-----BEGIN EC PRIVATE KEY-----\n{private_key_string}\n-----END EC PRIVATE KEY-----"
+                )
+                private_key = serialization.load_pem_private_key(
+                    private_key_pem.encode("utf-8"),
+                    password=None
+                )
+                logger.debug("✅ Loaded EC PRIVATE KEY (SEC1 format)")
+            except Exception as e1:
+                logger.debug(f"Failed to load as EC PRIVATE KEY: {e1}")
+                try:
+                    # Формат PRIVATE KEY (PKCS#8)
+                    private_key_pem = (
+                        f"-----BEGIN PRIVATE KEY-----\n{private_key_string}\n-----END PRIVATE KEY-----"
+                    )
+                    private_key = serialization.load_pem_private_key(
+                        private_key_pem.encode("utf-8"),
+                        password=None
+                    )
+                    logger.debug("✅ Loaded PRIVATE KEY (PKCS#8 format)")
+                except Exception as e2:
+                    logger.error(f"Failed to load as PRIVATE KEY: {e2}")
+                    raise ValueError(f"Could not load private key in any supported format. Tried EC PRIVATE KEY and PRIVATE KEY formats.")
+        else:
+            # Ключ уже в PEM формате
+            private_key = serialization.load_pem_private_key(
+                private_key_string.encode("utf-8"),
+                password=None
+            )
+            logger.debug("✅ Loaded key from PEM format")
         
         # 5. Подписываем payload используя ECDSA P-256 + SHA-256
         signature = private_key.sign(
